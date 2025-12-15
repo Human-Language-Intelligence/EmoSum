@@ -1,0 +1,68 @@
+# 1. Evaluate using provided fine-tuned model results
+
+# Note: Rename `Dockerfile_eval` to `Dockerfile` before running this command.
+
+# Build the Docker image required for running evaluation.
+# It takes approximately 20-25 minutes.
+docker build -t emosum .
+
+# Run the docker image
+docker run --gpus all -it emosum
+
+
+# 2. Full pipeline: training + adapter training + evaluation
+
+# Place `Dockerfile_for_train_and_test` in the `Emosum` directory
+# Note: Rename `Dockerfile_for_train_and_test` to `Dockerfile` before running this command.
+
+# Build the Docker image required for running evaluation.
+docker build -t emosum .
+
+# Run the docker image with volume mounting
+docker run --gpus all -it \
+  -v $(pwd):/workspace \
+  emosum
+
+# Activate the conda environment inside the Docker container
+source /opt/conda/etc/profile.d/conda.sh
+conda activate emosum
+
+# Change permission to make shell scripts executable
+chmod +x train_finetuning.sh train_adapter.sh peft_eval.sh
+
+# Clone required pretrained models from Hugging Face
+git clone https://huggingface.co/facebook/bart-large
+git clone https://huggingface.co/j-hartmann/emotion-english-roberta-large
+
+# Download large model files using Git LFS
+cd bart-large && git lfs pull
+cd ../emotion-english-roberta-large && git lfs pull
+cd ../
+
+# Step 1. Full fine-tuning of the base model
+GPU_DEVICE=0
+FFT_OUTPUT=output/fft
+
+./train_finetuning.sh $GPU_DEVICE $FFT_OUTPUT
+
+# Step 2. Train LoRA adapter on top of a specific full fine-tuning checkpoint
+GPU_DEVICE=0
+# Here, replace 'checkpoint-N' with the actual checkpoint directory name
+# Important: If the script fails, ensure the directory name follows the format of `(some_path)/checkpoint-N` (not '[Emotional_...]' or other formats)
+# For a quick sanity check, you may also use `FFT_OUTPUT=./ours/BART16`
+FFT_OUTPUT=output/fft/checkpoint-N
+LORA_OUTPUT=output/lora
+
+./train_adapter.sh $GPU_DEVICE $LORA_OUTPUT $FFT_OUTPUT
+
+# Step 3. Evaluate the trained model with LoRA adapter
+GPU_DEVICE=0
+# Here, replace 'checkpoint-N' with the actual checkpoint directory name
+# Important: If the script fails, ensure the directory name follows the format of `(some_path)/checkpoint-N` (not '[Emotional_...]' or other formats)
+# For a quick sanity check, you may also use `BASE_MODEL=./ours/BART16`
+BASE_MODEL=output/fft/checkpoint-N
+# For a quick sanity check, you may also use `LORA=./ours/lora/summarization_adapter`
+LORA=output/lora/summarization_adapter
+OUTPUT=eval_result
+
+./peft_eval.sh $GPU_DEVICE $BASE_MODEL $LORA $OUTPUT

@@ -1,0 +1,7 @@
+checkpoints
+data
+eval_result
+output
+tmp_trainer
+src/__pycache__
+wandb
