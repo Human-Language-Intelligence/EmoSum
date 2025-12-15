@@ -1,4 +1,4 @@
-# EmotionalBART
+# EmoSum
 
 ## Prepare
 ```bash
